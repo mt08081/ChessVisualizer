@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chess Visualization Trainer</title>
+    
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --primary-hover: #45a049;
+            --bg: #f4f7f6;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --danger: #e53935;
+            --border: #e0e0e0;
+            
+            /* Classic Chess colors */
+            --board-light: #ebecd0;
+            --board-dark: #739552;
+
+            /* AI feature colors */
+            --ai-gradient: linear-gradient(135deg, #673ab7, #9c27b0);
+            --ai-hover: linear-gradient(135deg, #5e35b1, #8e24aa);
+            
+            /* Tray colors */
+            --tray-bg: #f9f9f9;
+            --btn-bg: #ffffff;
+        }
+
+        body.dark-mode {
+            --bg: #121212;
+            --card-bg: #1e1e1e;
+            --text: #e0e0e0;
+            --border: #444444;
+            --tray-bg: #2a2a2a;
+            --btn-bg: #333333;
+        }
+
+        body.dark-mode #modal {
+            background: var(--card-bg);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 15px;
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+
+        #app {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        #score { flex: 1; text-align: left; }
+        #header-center { flex: 1; display: flex; justify-content: center; }
+        #lives { flex: 1; text-align: right; }
+
+        .heart { color: var(--danger); transition: all 0.3s; }
+
+        /* Board Wrapper */
+        #board-wrapper {
+            display: grid;
+            grid-template-columns: 20px 1fr;
+            grid-template-rows: 1fr 20px;
+            width: 100%;
+            max-width: 420px;
+            margin-bottom: 15px;
+        }
+
+        .rank-labels {
+            grid-column: 1;
+            grid-row: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #777;
+            padding-right: 5px;
+            user-select: none;
+        }
+
+        .file-labels {
+            grid-column: 2;
+            grid-row: 2;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #777;
+            padding-top: 5px;
+            user-select: none;
+        }
+
+        #board-container {
+            grid-column: 2;
+            grid-row: 1;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border: 4px solid #444;
+            border-radius: 4px;
+            background-color: var(--board-light);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .square {
+            position: relative; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .square.light { background-color: var(--board-light); }
+        .square.dark { background-color: var(--board-dark); }
+
+        /* Red Blink Error Animation Overlay */
+        .square::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(229, 57, 53, 0.7);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes flashError {
+            0%, 100% { opacity: 0; }
+            25%, 75% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .square.error-blink::after {
+            animation: flashError 1.2s ease-in-out;
+        }
+
+        /* Custom Pieces */
+        .piece {
+            font-size: 2.8rem;
+            line-height: 1;
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+        }
+
+        @media (max-width: 380px) {
+            .piece { font-size: 2.2rem; }
+        }
+
+        .piece.white {
+            color: #ffffff;
+            -webkit-text-stroke: 1.5px #111;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.4);
+        }
+
+        .piece.black {
+            color: #1a1a1a;
+            -webkit-text-stroke: 1px #000;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.4);
+        }
+
+        body.dark-mode .tray-btn .piece.black {
+            -webkit-text-stroke: 1px #888; /* Helps black pieces stand out on dark tray */
+        }
+
+        /* Piece Tray */
+        #piece-tray {
+            background: var(--tray-bg);
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+            display: none;
+        }
+
+        .tray-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+        
+        .tray-row:last-child { margin-bottom: 0; }
+
+        .tray-btn {
+            background-color: var(--btn-bg);
+            width: 45px;
+            height: 45px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            padding: 0;
+        }
+
+        .tray-btn:active { transform: scale(0.95); }
+
+        .tray-btn.selected {
+            border-color: var(--primary);
+            background-color: #e8f5e9;
+        }
+
+        body.dark-mode .tray-btn.selected {
+            background-color: #1b3320;
+        }
+
+        .eraser-btn {
+            width: 100%;
+            max-width: 280px;
+            height: 40px;
+            font-size: 1em;
+            color: var(--danger);
+            border: 2px solid #ffcdd2;
+            background: var(--btn-bg);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .eraser-btn.selected {
+            border-color: var(--danger);
+            background-color: #ffebee;
+        }
+
+        body.dark-mode .eraser-btn.selected {
+            background-color: #3b1919;
+            border-color: #d32f2f;
+        }
+
+        /* Controls */
+        .controls-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 300px;
+            align-items: center;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary:active { background-color: var(--primary-hover); transform: scale(0.98); }
+
+        .btn-ai {
+            background: var(--ai-gradient);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s;
+            width: 100%;
+            box-shadow: 0 4px 10px rgba(103, 58, 183, 0.3);
+        }
+
+        .btn-ai:hover { background: var(--ai-hover); }
+        .btn-ai:active { transform: scale(0.98); }
+        .btn-ai:disabled { background: #9e9e9e; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        #timer {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 10px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: color 0.3s;
+        }
+
+        /* Modal Styles */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        #modal {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            text-align: center;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #modal h2 { margin: 0; color: var(--text); }
+        #modal p { font-size: 1.1em; margin: 0; color: var(--text); line-height: 1.4; }
+        
+        .modal-buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        #modal-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            width: 100%;
+        }
+
+        .theme-toggle-btn {
+            background: var(--tray-bg);
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: var(--text);
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .theme-toggle-btn:hover { 
+            transform: translateY(-2px) rotate(15deg);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .theme-toggle-btn:active { 
+            transform: scale(0.9) rotate(-15deg); 
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <div id="header">
+            <span id="score">Score: 0</span>
+            <div id="header-center">
+                <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Dark Mode">🌙</button>
+            </div>
+            <span id="lives">Lives: <span class="heart">❤❤❤</span></span>
+        </div>
+        
+        <div id="timer">Ready?</div>
+
+        <div id="board-wrapper">
+            <!-- Numbers 1-8 -->
+            <div class="rank-labels">
+                <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+            </div>
+            
+            <div id="board-container"></div>
+            
+            <!-- Letters A-H -->
+            <div class="file-labels">
+                <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span>
+            </div>
+        </div>
+        
+        <div id="piece-tray">
+            <div style="font-size: 0.85em; margin-bottom: 10px; text-align: center; color: #666; font-weight: 500;">
+                Select a piece below, then tap the board to place it.
+            </div>
+            
+            <div class="tray-row">
+                <!-- White Pieces -->
+                <button class="tray-btn selected" onclick="selectPiece('P', this)"><span class="piece white">♟</span></button>
+                <button class="tray-btn" onclick="selectPiece('N', this)"><span class="piece white">♞</span></button>
+                <button class="tray-btn" onclick="selectPiece('B', this)"><span class="piece white">♝</span></button>
+                <button class="tray-btn" onclick="selectPiece('R', this)"><span class="piece white">♜</span></button>
+                <button class="tray-btn" onclick="selectPiece('Q', this)"><span class="piece white">♛</span></button>
+                <button class="tray-btn" onclick="selectPiece('K', this)"><span class="piece white">♚</span></button>
+            </div>
+            
+            <div class="tray-row">
+                <!-- Black Pieces -->
+                <button class="tray-btn" onclick="selectPiece('p', this)"><span class="piece black">♟</span></button>
+                <button class="tray-btn" onclick="selectPiece('n', this)"><span class="piece black">♞</span></button>
+                <button class="tray-btn" onclick="selectPiece('b', this)"><span class="piece black">♝</span></button>
+                <button class="tray-btn" onclick="selectPiece('r', this)"><span class="piece black">♜</span></button>
+                <button class="tray-btn" onclick="selectPiece('q', this)"><span class="piece black">♛</span></button>
+                <button class="tray-btn" onclick="selectPiece('k', this)"><span class="piece black">♚</span></button>
+            </div>
+            
+            <div class="tray-row" style="margin-top: 10px;">
+                <button class="eraser-btn" onclick="selectPiece(null, this)">🗑️ Clear Square</button>
+            </div>
+        </div>
+
+        <div class="controls-row">
+            <button id="start-btn" class="btn-primary">Start Practice</button>
+            <button id="hint-btn" class="btn-ai hidden" onclick="getAIHint()">✨ Get Memory Hint</button>
+            <button id="submit-btn" class="btn-primary hidden">Submit Answer</button>
+            <button id="play-again-btn" class="btn-primary hidden">Play Again</button>
+        </div>
+    </div>
+
+    <!-- Custom Modal -->
+    <div id="modal-overlay">
+        <div id="modal">
+            <h2 id="modal-title">Title</h2>
+            <p id="modal-message">Message</p>
+            <div class="modal-buttons-container">
+                <button id="modal-ai-btn" class="btn-ai hidden">✨ AI Action</button>
+                <button id="modal-btn" onclick="closeModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stable external library for validation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <script>
+        // --- Configuration ---
+        const ENABLE_AI_FEATURES = false; // Set to false to hide/disable all AI functionalities
+
+        // --- Gemini API Setup ---
+        const apiKey = ""; // API key is injected by the execution environment
+
+        async function fetchFromGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { 
+                    parts: [{ text: "You are a helpful, encouraging chess visualization coach. Always be brief and concise (1 to 2 sentences max)." }] 
+                }
+            };
+
+            // Exponential backoff
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't analyze the position right now.";
+                } catch (error) {
+                    if (i === delays.length) throw error;
+                    await new Promise(res => setTimeout(res, delays[i]));
+                }
+            }
+        }
+
+        // --- State Variables ---
+        let currentSolutionFen = '';
+        let currentBoardState = Array(8).fill(null).map(() => Array(8).fill(null));
+        let score = 0;
+        let lives = 3;
+        let timerInterval = null;
+        let selectedPiece = 'P'; 
+        let isEditMode = false;
+
+        // Visual mapping for pieces
+        const pieceCharMapping = {
+            'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
+        };
+
+        // --- DOM Elements ---
+        const boardElement = document.getElementById('board-container');
+        const startBtn = document.getElementById('start-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const hintBtn = document.getElementById('hint-btn');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const timerDisplay = document.getElementById('timer');
+        const trayElement = document.getElementById('piece-tray');
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        const playAgainBtn = document.getElementById('play-again-btn');
+        
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalAiBtn = document.getElementById('modal-ai-btn');
+        let modalCallback = null;
+
+        // --- Initialization ---
+        startBtn.addEventListener('click', startRound);
+        submitBtn.addEventListener('click', checkAnswer);
+        playAgainBtn.addEventListener('click', () => {
+            playAgainBtn.classList.add('hidden');
+            resetGame();
+        });
+        
+        themeToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            themeToggleBtn.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌙';
+        });
+
+        loadFenToBoard('8/8/8/8/8/8/8/8'); 
+
+        // --- Core Functions ---
+
+        function selectPiece(pieceKey, btnElement) {
+            selectedPiece = pieceKey;
+            document.querySelectorAll('.tray-btn, .eraser-btn').forEach(btn => btn.classList.remove('selected'));
+            btnElement.classList.add('selected');
+        }
+
+        function renderBoard() {
+            boardElement.innerHTML = '';
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    const isLight = (row + col) % 2 === 0;
+                    square.className = `square ${isLight ? 'light' : 'dark'}`;
+                    
+                    const pieceKey = currentBoardState[row][col];
+                    
+                    if (pieceKey) {
+                        const pieceElement = document.createElement('div');
+                        const isWhite = pieceKey === pieceKey.toUpperCase();
+                        pieceElement.className = `piece ${isWhite ? 'white' : 'black'}`;
+                        pieceElement.textContent = pieceCharMapping[pieceKey.toLowerCase()];
+                        square.appendChild(pieceElement);
+                    }
+
+                    square.addEventListener('click', () => {
+                        if (!isEditMode) return;
+                        currentBoardState[row][col] = selectedPiece;
+                        renderBoard();
+                    });
+
+                    boardElement.appendChild(square);
+                }
+            }
+        }
+
+        function getArrayFromFen(fenStr) {
+            const rows = fenStr.split(' ')[0].split('/');
+            let board = Array(8).fill(null).map(() => Array(8).fill(null));
+            for (let i = 0; i < 8; i++) {
+                let col = 0;
+                for (let char of rows[i]) {
+                    if (!isNaN(char)) {
+                        col += parseInt(char);
+                    } else {
+                        board[i][col] = char;
+                        col++;
+                    }
+                }
+            }
+            return board;
+        }
+
+        function loadFenToBoard(fenStr) {
+            currentBoardState = getArrayFromFen(fenStr);
+            renderBoard();
+        }
+
+        function getBoardFen() {
+            let fen = '';
+            for (let i = 0; i < 8; i++) {
+                let empty = 0;
+                for (let j = 0; j < 8; j++) {
+                    if (currentBoardState[i][j] === null) {
+                        empty++;
+                    } else {
+                        if (empty > 0) {
+                            fen += empty;
+                            empty = 0;
+                        }
+                        fen += currentBoardState[i][j];
+                    }
+                }
+                if (empty > 0) fen += empty;
+                if (i < 7) fen += '/';
+            }
+            return fen;
+        }
+
+        function startRound() {
+            if (typeof Chess !== 'function') {
+                showModal("Network Error", "The chess rules loaded incorrectly. Please refresh the page.", null);
+                return;
+            }
+
+            startBtn.classList.add('hidden');
+            submitBtn.classList.add('hidden');
+            hintBtn.classList.add('hidden');
+            trayElement.style.display = 'none';
+            isEditMode = false;
+            
+            currentSolutionFen = generateVisualizationPosition();
+            loadFenToBoard(currentSolutionFen);
+            
+            let timeLeft = 5;
+            timerDisplay.textContent = `Memorize: ${timeLeft}s`;
+            timerDisplay.style.color = 'var(--primary)';
+            
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerDisplay.textContent = `Memorize: ${timeLeft}s`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    hidePieces();
+                }
+            }, 1000);
+        }
+
+        function hidePieces() {
+            timerDisplay.textContent = 'Reconstruct the board!';
+            timerDisplay.style.color = 'var(--text)';
+            
+            loadFenToBoard('8/8/8/8/8/8/8/8');
+            isEditMode = true; 
+            
+            submitBtn.classList.remove('hidden');
+            if (ENABLE_AI_FEATURES) {
+                hintBtn.classList.remove('hidden');
+            }
+            trayElement.style.display = 'block';
+        }
+
+        function checkAnswer() {
+            const playerFen = getBoardFen();
+            const solutionFen = currentSolutionFen.split(' ')[0]; 
+
+            if (playerFen === solutionFen) {
+                score++;
+                updateScoreBoard();
+                showModal("Correct!", "Perfect visualization! Keep it up.", () => {
+                    resetRoundUI();
+                });
+            } else {
+                lives--;
+                updateScoreBoard();
+                
+                const solutionArray = getArrayFromFen(solutionFen);
+                let mismatches = [];
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        if (currentBoardState[r][c] !== solutionArray[r][c]) {
+                            mismatches.push(r * 8 + c);
+                        }
+                    }
+                }
+
+                if (lives <= 0) {
+                    mismatches.forEach(index => {
+                        boardElement.children[index].classList.add('error-blink');
+                    });
+                    
+                    timerDisplay.textContent = "Game Over!";
+                    timerDisplay.style.color = 'var(--danger)';
+
+                    setTimeout(() => {
+                        showModal("Game Over", "Out of lives! Let's see the correct position.", () => {
+                            isEditMode = false;
+                            loadFenToBoard(currentSolutionFen);
+                            
+                            // Show Actual Position & Play Again button
+                            submitBtn.classList.add('hidden');
+                            hintBtn.classList.add('hidden');
+                            trayElement.style.display = 'none';
+                            playAgainBtn.classList.remove('hidden');
+                            
+                            timerDisplay.textContent = "Actual Position";
+                            timerDisplay.style.color = 'var(--text)';
+                        });
+                    }, 1200);
+                } else {
+                    mismatches.forEach(index => {
+                        const sq = boardElement.children[index];
+                        sq.classList.remove('error-blink');
+                        void sq.offsetWidth; 
+                        sq.classList.add('error-blink');
+                        setTimeout(() => sq.classList.remove('error-blink'), 1200);
+                    });
+
+                    timerDisplay.textContent = "Incorrect! Check the red squares.";
+                    timerDisplay.style.color = 'var(--danger)';
+                    
+                    // Delay the modal so it doesn't block the board while it's blinking
+                    setTimeout(() => {
+                        if (isEditMode) { 
+                            timerDisplay.textContent = "Keep trying to fix it!";
+                            timerDisplay.style.color = 'var(--text)';
+                            
+                            if (ENABLE_AI_FEATURES) {
+                                showModal(
+                                    "Incorrect Placement", 
+                                    "You placed some pieces incorrectly. Would you like AI to analyze your mistake?", 
+                                    null, 
+                                    { 
+                                        text: "✨ Analyze Mistake", 
+                                        action: async () => {
+                                            modalAiBtn.textContent = "✨ Thinking...";
+                                            modalAiBtn.disabled = true;
+                                            const prompt = `I am trying to memorize this chess position: ${solutionFen}. I incorrectly placed the pieces like this: ${playerFen}. Briefly tell me (in 1-2 sentences) what specific pieces I misplaced or missed to help me correct it.`;
+                                            const aiResponse = await fetchFromGemini(prompt);
+                                            modalMessage.textContent = aiResponse;
+                                            modalAiBtn.classList.add('hidden');
+                                            modalAiBtn.disabled = false;
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    }, 1300); // Wait 1.3 seconds for the blink animation to finish
+                }
+            }
+        }
+
+        // --- AI Features ---
+
+        async function getAIHint() {
+            hintBtn.disabled = true;
+            hintBtn.textContent = "✨ Thinking...";
+            try {
+                const solutionFenStr = currentSolutionFen.split(' ')[0];
+                const prompt = `Analyze this chess position (FEN: ${solutionFenStr}). Provide a 1 to 2 sentence memorable description or mnemonic of where the pieces are located to help a player memorize the board state. Use coordinate names.`;
+                const response = await fetchFromGemini(prompt);
+                showModal("✨ Memory Hint", response, null);
+            } catch (error) {
+                showModal("Error", "Could not reach the coach. Try again later.", null);
+            } finally {
+                hintBtn.disabled = false;
+                hintBtn.textContent = "✨ Get Memory Hint";
+            }
+        }
+
+        // --- UI Utils ---
+
+        function updateScoreBoard() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            livesDisplay.innerHTML = `Lives: <span class="heart">${'❤'.repeat(lives)}</span>`;
+        }
+
+        function resetRoundUI() {
+            startBtn.classList.remove('hidden');
+            submitBtn.classList.add('hidden');
+            hintBtn.classList.add('hidden');
+            playAgainBtn.classList.add('hidden');
+            trayElement.style.display = 'none';
+            timerDisplay.textContent = 'Ready?';
+            timerDisplay.style.color = 'var(--primary)';
+            isEditMode = false;
+            loadFenToBoard('8/8/8/8/8/8/8/8');
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            updateScoreBoard();
+            resetRoundUI();
+        }
+
+        function showModal(title, message, callback, aiAction = null) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalCallback = callback;
+            
+            if (aiAction) {
+                modalAiBtn.textContent = aiAction.text;
+                modalAiBtn.onclick = aiAction.action;
+                modalAiBtn.classList.remove('hidden');
+            } else {
+                modalAiBtn.classList.add('hidden');
+            }
+
+            modalOverlay.style.display = 'flex';
+        }
+
+        function closeModal() {
+            modalOverlay.style.display = 'none';
+            if (modalCallback) {
+                modalCallback();
+                modalCallback = null;
+            }
+        }
+
+        // --- Position Generator ---
+        const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const allSquares = [];
+        for (const file of files) for (const rank of ranks) allSquares.push(file + rank);
+
+        const piecePool = [
+            ...Array(8).fill({ type: 'p', color: 'w' }),
+            ...Array(2).fill({ type: 'r', color: 'w' }),
+            ...Array(2).fill({ type: 'n', color: 'w' }),
+            ...Array(2).fill({ type: 'b', color: 'w' }),
+            { type: 'q', color: 'w' },
+            ...Array(8).fill({ type: 'p', color: 'b' }),
+            ...Array(2).fill({ type: 'r', color: 'b' }),
+            ...Array(2).fill({ type: 'n', color: 'b' }),
+            ...Array(2).fill({ type: 'b', color: 'b' }),
+            { type: 'q', color: 'b' }
+        ];
+
+        function generateVisualizationPosition() {
+            const tempChess = new Chess();
+            const minPieces = 3;
+            const maxPieces = 8;
+            const totalPieces = Math.floor(Math.random() * (maxPieces - minPieces + 1)) + minPieces;
+            const nonKingCount = totalPieces - 2; 
+
+            for (let attempt = 0; attempt < 500; attempt++) {
+                tempChess.clear();
+                const poolCopy = shuffleArray([...piecePool]);
+                const selectedPieces = poolCopy.slice(0, nonKingCount);
+                
+                selectedPieces.push({ type: 'k', color: 'w' });
+                selectedPieces.push({ type: 'k', color: 'b' });
+
+                let availableSquares = shuffleArray([...allSquares]);
+                let placementFailed = false;
+
+                for (const piece of selectedPieces) {
+                    const squareIndex = availableSquares.findIndex(square => {
+                        if (piece.type === 'p') return square[1] !== '1' && square[1] !== '8';
+                        return true;
+                    });
+                    
+                    if (squareIndex === -1) { 
+                        placementFailed = true; 
+                        break; 
+                    }
+                    const chosenSquare = availableSquares.splice(squareIndex, 1)[0];
+                    tempChess.put({ type: piece.type, color: piece.color }, chosenSquare);
+                }
+                
+                if (placementFailed) continue; 
+                
+                const baseFen = tempChess.fen();
+                const testW = new Chess();
+                const testB = new Chess();
+                
+                if (testW.load(baseFen.replace(/ [wb] /, ' w ')) && 
+                    testB.load(baseFen.replace(/ [wb] /, ' b '))) {
+                    if (!testW.in_check() && !testB.in_check()) {
+                        return baseFen; 
+                    }
+                }
+            }
+            
+            return '4k3/8/8/8/8/8/8/4K2R w - - 0 1';
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+    </script>
+</body>
+</html>
